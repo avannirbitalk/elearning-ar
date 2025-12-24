@@ -1,75 +1,16 @@
-import { useState, useRef, useEffect, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Center, Stage } from '@react-three/drei';
-import * as THREE from 'three';
-import { FaPlay, FaStop, FaExpand, FaCompress, FaCube, FaCamera } from 'react-icons/fa';
+import { useState, useRef, useEffect } from 'react';
+import { FaExpand, FaCompress, FaCube, FaCamera } from 'react-icons/fa';
 import { TbAugmentedReality, TbCube } from 'react-icons/tb';
+import '@google/model-viewer';
 
-// 3D Model Component
-function Model({ modelUrl, scale = 1, isPlaying, playDirection }) {
-  const gltf = useGLTF(modelUrl);
-  const mixer = useRef();
-  const actions = useRef([]);
-
-  useEffect(() => {
-    if (gltf.animations && gltf.animations.length && gltf.scene) {
-      mixer.current = new THREE.AnimationMixer(gltf.scene);
-      actions.current = gltf.animations.map((clip) => {
-        const action = mixer.current.clipAction(clip);
-        action.play();
-        return action;
-      });
-    }
-  }, [gltf]);
-
-  useEffect(() => {
-    if (actions.current.length > 0) {
-      actions.current.forEach((action) => {
-        action.timeScale = playDirection * 0.5;
-      });
-    }
-  }, [playDirection]);
-
-  useFrame((_, delta) => {
-    if (isPlaying && mixer.current) {
-      mixer.current.update(delta);
-    }
-  });
-
-  return (
-    <Center>
-      <primitive object={gltf.scene} scale={scale} />
-    </Center>
-  );
-}
-
-// Loading fallback
-function LoadingModel() {
-  const meshRef = useRef();
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.5;
-      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.5;
-    }
-  });
-  
-  return (
-    <mesh ref={meshRef}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#3b82f6" wireframe />
-    </mesh>
-  );
-}
-
-// Main 3D Viewer Component
+// Main 3D Viewer Component using Google's model-viewer
 export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, title }) {
   const [mode, setMode] = useState('3D');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playDirection, setPlayDirection] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const containerRef = useRef(null);
+  const modelViewerRef = useRef(null);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -92,20 +33,6 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
     }
   };
 
-  const handlePlay = () => {
-    setPlayDirection(1);
-    setIsPlaying(true);
-  };
-
-  const handleReverse = () => {
-    setPlayDirection(-1);
-    setIsPlaying(true);
-  };
-
-  const handleStop = () => {
-    setIsPlaying(false);
-  };
-
   const buttonClass = `
     bg-slate-800/80 backdrop-blur
     border border-blue-400/50
@@ -114,6 +41,7 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
     hover:border-blue-300 hover:shadow-lg
     transition text-white
     flex items-center justify-center
+    cursor-pointer
   `;
 
   if (hasError) {
@@ -135,45 +63,40 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
         className="relative w-full h-[450px] border-2 border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden shadow-lg bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"
       >
         {mode === '3D' ? (
-          <Canvas
-            camera={{ position: [3, 3, 3], fov: 50 }}
-            onCreated={({ gl }) => {
-              gl.setClearColor('#f1f5f9');
-            }}
-          >
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[5, 5, 5]} intensity={0.8} />
-            <directionalLight position={[-5, 5, -5]} intensity={0.4} />
-            <pointLight position={[0, 10, 0]} intensity={0.3} />
-            <Suspense fallback={<LoadingModel />}>
-              <Model
-                modelUrl={modelUrl}
-                scale={scale}
-                isPlaying={isPlaying}
-                playDirection={playDirection}
-              />
-            </Suspense>
-            <OrbitControls
-              enablePan={true}
-              enableZoom={true}
-              enableRotate={true}
-              autoRotate={!isPlaying}
-              autoRotateSpeed={1}
-              minDistance={1}
-              maxDistance={20}
+          <>
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 z-10">
+                <div className="text-center">
+                  <div className="inline-block w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="mt-4 text-slate-600 dark:text-slate-400">Memuat Model 3D...</p>
+                </div>
+              </div>
+            )}
+            <model-viewer
+              ref={modelViewerRef}
+              src={modelUrl}
+              alt={title || "Model 3D"}
+              auto-rotate
+              camera-controls
+              touch-action="pan-y"
+              shadow-intensity="1"
+              exposure="1"
+              style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
+              onLoad={() => setIsLoading(false)}
+              onError={() => {
+                setIsLoading(false);
+                setHasError(true);
+              }}
             />
-            <gridHelper args={[10, 10, '#cbd5e1', '#e2e8f0']} position={[0, -1.5, 0]} />
-          </Canvas>
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
             <div className="text-center text-white p-8">
               <FaCamera className="w-16 h-16 mx-auto mb-4 opacity-50" />
               <h3 className="text-xl font-bold mb-2">Mode AR</h3>
               <p className="text-sm text-slate-300 mb-4">
-                Arahkan kamera ke permukaan datar untuk melihat model 3D dalam Augmented Reality
-              </p>
-              <p className="text-xs text-slate-400 mb-4">
-                (Fitur AR memerlukan perangkat dengan kamera dan browser yang mendukung WebXR)
+                Untuk melihat model dalam AR, klik tombol AR pada model 3D viewer.<br/>
+                Fitur ini memerlukan perangkat dengan kamera yang mendukung AR.
               </p>
               <button
                 onClick={() => setMode('3D')}
@@ -188,39 +111,30 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
         {/* Fullscreen Button */}
         <button
           onClick={toggleFullscreen}
-          className={`${buttonClass} absolute top-3 left-3 z-10`}
+          className={`${buttonClass} absolute top-3 left-3 z-20`}
           title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
         >
           {isFullscreen ? <FaCompress className="w-5 h-5" /> : <FaExpand className="w-5 h-5" />}
         </button>
 
-        {/* Playback Controls */}
-        {mode === '3D' && (
-          <div className="absolute bottom-3 left-3 flex gap-2 z-10">
-            <button onClick={handleReverse} className={buttonClass} title="Reverse">
-              <FaPlay className="w-5 h-5 transform rotate-180" />
-            </button>
-            <button onClick={handleStop} className={buttonClass} title="Stop">
-              <FaStop className="w-5 h-5" />
-            </button>
-            <button onClick={handlePlay} className={buttonClass} title="Play">
-              <FaPlay className="w-5 h-5" />
-            </button>
-          </div>
+        {/* Mode Switch Button */}
+        {arEnabled && mode === '3D' && (
+          <button
+            onClick={() => setMode('AR')}
+            className={`${buttonClass} absolute bottom-3 right-3 z-20`}
+            title="Info AR"
+          >
+            <TbAugmentedReality className="w-7 h-7" />
+          </button>
         )}
 
-        {/* Mode Switch Button */}
-        {arEnabled && (
+        {mode === 'AR' && (
           <button
-            onClick={() => setMode(mode === '3D' ? 'AR' : '3D')}
-            className={`${buttonClass} absolute bottom-3 right-3 z-10`}
-            title={mode === '3D' ? 'Mode AR' : 'Mode 3D'}
+            onClick={() => setMode('3D')}
+            className={`${buttonClass} absolute bottom-3 right-3 z-20`}
+            title="Mode 3D"
           >
-            {mode === '3D' ? (
-              <TbAugmentedReality className="w-7 h-7" />
-            ) : (
-              <TbCube className="w-7 h-7" />
-            )}
+            <TbCube className="w-7 h-7" />
           </button>
         )}
       </div>
