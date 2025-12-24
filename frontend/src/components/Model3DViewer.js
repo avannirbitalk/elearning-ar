@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Environment, Center } from '@react-three/drei';
+import { OrbitControls, useGLTF, Center, Stage } from '@react-three/drei';
 import * as THREE from 'three';
 import { FaPlay, FaStop, FaExpand, FaCompress, FaCube, FaCamera } from 'react-icons/fa';
 import { TbAugmentedReality, TbCube } from 'react-icons/tb';
@@ -12,7 +12,7 @@ function Model({ modelUrl, scale = 1, isPlaying, playDirection }) {
   const actions = useRef([]);
 
   useEffect(() => {
-    if (gltf.animations.length && gltf.scene) {
+    if (gltf.animations && gltf.animations.length && gltf.scene) {
       mixer.current = new THREE.AnimationMixer(gltf.scene);
       actions.current = gltf.animations.map((clip) => {
         const action = mixer.current.clipAction(clip);
@@ -45,8 +45,17 @@ function Model({ modelUrl, scale = 1, isPlaying, playDirection }) {
 
 // Loading fallback
 function LoadingModel() {
+  const meshRef = useRef();
+  
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.5;
+      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.5;
+    }
+  });
+  
   return (
-    <mesh>
+    <mesh ref={meshRef}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color="#3b82f6" wireframe />
     </mesh>
@@ -59,6 +68,7 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
   const [isPlaying, setIsPlaying] = useState(false);
   const [playDirection, setPlayDirection] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -106,6 +116,18 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
     flex items-center justify-center
   `;
 
+  if (hasError) {
+    return (
+      <div className="w-full h-[450px] border-2 border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden flex items-center justify-center bg-slate-100 dark:bg-slate-800">
+        <div className="text-center p-8">
+          <FaCube className="w-16 h-16 mx-auto mb-4 text-slate-400" />
+          <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">Gagal memuat model 3D</h3>
+          <p className="text-sm text-slate-500">Model mungkin tidak tersedia atau format tidak didukung</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       <div
@@ -113,10 +135,16 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
         className="relative w-full h-[450px] border-2 border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden shadow-lg bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"
       >
         {mode === '3D' ? (
-          <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
-            <ambientLight intensity={0.5} />
-            <directionalLight position={[5, 5, 5]} intensity={1} />
-            <pointLight position={[-5, 5, -5]} intensity={0.5} />
+          <Canvas
+            camera={{ position: [3, 3, 3], fov: 50 }}
+            onCreated={({ gl }) => {
+              gl.setClearColor('#f1f5f9');
+            }}
+          >
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[5, 5, 5]} intensity={0.8} />
+            <directionalLight position={[-5, 5, -5]} intensity={0.4} />
+            <pointLight position={[0, 10, 0]} intensity={0.3} />
             <Suspense fallback={<LoadingModel />}>
               <Model
                 modelUrl={modelUrl}
@@ -131,16 +159,21 @@ export default function Model3DViewer({ modelUrl, scale = 1, arEnabled = true, t
               enableRotate={true}
               autoRotate={!isPlaying}
               autoRotateSpeed={1}
+              minDistance={1}
+              maxDistance={20}
             />
-            <Environment preset="studio" />
+            <gridHelper args={[10, 10, '#cbd5e1', '#e2e8f0']} position={[0, -1.5, 0]} />
           </Canvas>
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-black">
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
             <div className="text-center text-white p-8">
               <FaCamera className="w-16 h-16 mx-auto mb-4 opacity-50" />
               <h3 className="text-xl font-bold mb-2">Mode AR</h3>
               <p className="text-sm text-slate-300 mb-4">
                 Arahkan kamera ke permukaan datar untuk melihat model 3D dalam Augmented Reality
+              </p>
+              <p className="text-xs text-slate-400 mb-4">
+                (Fitur AR memerlukan perangkat dengan kamera dan browser yang mendukung WebXR)
               </p>
               <button
                 onClick={() => setMode('3D')}
